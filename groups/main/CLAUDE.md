@@ -45,6 +45,13 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+### Sparklist
+
+`/workspace/group/sparklist.md` - A curated collection of interesting projects and ideas to explore in the future. When the user shares interesting GitHub repos or links with context like "save this for later" or "remember this", add them here with:
+- Project name and URL
+- Date added
+- One-sentence description of what it does
+
 ## WhatsApp Formatting (and other messaging apps)
 
 Do NOT use markdown headings (##) in WhatsApp messages. Only use:
