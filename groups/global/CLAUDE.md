@@ -43,6 +43,10 @@ Files you create are saved in `/workspace/group/`. Use this for notes, research,
 
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
 
+When the user asks to clear/reset conversation history, use `mcp__nanoclaw__clear_conversation`.
+- Optionally include a short summary so the reset conversation can be archived for later reference.
+- Outcome: the current conversation session is cleared, the next user message starts a fresh session, and files like `CLAUDE.md` and workspace content remain unchanged.
+
 When you learn something important:
 - Create files for structured data (e.g., `customers.md`, `preferences.md`)
 - Split files larger than 500 lines into folders

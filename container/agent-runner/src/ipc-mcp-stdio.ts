@@ -14,6 +14,7 @@ import { CronExpressionParser } from 'cron-parser';
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
+const IPC_INPUT_DIR = path.join(IPC_DIR, 'input');
 
 // Context from environment variables (set by the agent runner)
 const chatJid = process.env.NANOCLAW_CHAT_JID!;
@@ -32,6 +33,13 @@ function writeIpcFile(dir: string, data: object): string {
   fs.renameSync(tempPath, filepath);
 
   return filename;
+}
+
+function atomicWriteFile(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tempPath, content);
+  fs.renameSync(tempPath, filePath);
 }
 
 const server = new McpServer({
@@ -276,6 +284,57 @@ Use available_groups.json to find the JID for a group. The folder name should be
 
     return {
       content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
+    };
+  },
+);
+
+server.tool(
+  'clear_conversation',
+  `Clear the current conversation session. This resets the conversation history so the next message starts a fresh session.
+
+Use this when the user asks to clear/reset the conversation (e.g., "/clear", "start fresh", "reset").
+
+IMPORTANT: Before calling this tool, save any critical context to CLAUDE.md so it persists across the reset. The group's CLAUDE.md file and all files in /workspace/group/ are preserved — only the conversation session is cleared.
+
+Optionally provide a summary that will be archived to /workspace/group/conversations/.`,
+  {
+    summary: z.string().optional().describe('Optional summary of the conversation being cleared. Archived for reference.'),
+  },
+  async (args) => {
+    // Archive summary if provided
+    if (args.summary) {
+      try {
+        const conversationsDir = '/workspace/group/conversations';
+        fs.mkdirSync(conversationsDir, { recursive: true });
+        const date = new Date().toISOString().split('T')[0];
+        const time = new Date().toISOString().replace(/[:.]/g, '-').slice(11, 19);
+        const filename = `${date}-${time}-cleared.md`;
+        const filePath = path.join(conversationsDir, filename);
+        const content = `# Conversation Cleared\n\nDate: ${new Date().toISOString()}\n\n## Summary\n\n${args.summary}\n`;
+        fs.writeFileSync(filePath, content);
+      } catch {
+        // Non-fatal: archiving failure should not prevent the clear
+      }
+    }
+
+    // Write marker file for the host to detect after container exits
+    // TODO: Add stale-marker protection by including and validating a per-run nonce/session binding on host consumption.
+    const markerPath = path.join(IPC_DIR, '_clear_session');
+    atomicWriteFile(markerPath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      summary: args.summary || null,
+    }));
+
+    // Request immediate graceful shutdown of the current runner loop.
+    // Order matters: clear marker must be visible before _close is consumed.
+    const closeSentinelPath = path.join(IPC_INPUT_DIR, '_close');
+    atomicWriteFile(closeSentinelPath, '');
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: 'Conversation session will be cleared when this response completes. The next message will start a fresh session. Your CLAUDE.md and group files are preserved.',
+      }],
     };
   },
 );

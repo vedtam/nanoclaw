@@ -18,6 +18,7 @@ import {
   writeTasksSnapshot,
 } from './container-runner.js';
 import {
+  deleteSession,
   getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
@@ -279,6 +280,24 @@ async function runAgent(
     if (output.newSessionId) {
       sessions[group.folder] = output.newSessionId;
       setSession(group.folder, output.newSessionId);
+    }
+
+    // Check for clear-session marker written by the agent's clear_conversation tool.
+    // Runs AFTER the final session save above to avoid race conditions.
+    const clearMarkerPath = path.join(DATA_DIR, 'ipc', group.folder, '_clear_session');
+    if (fs.existsSync(clearMarkerPath)) {
+      try {
+        const markerData = JSON.parse(fs.readFileSync(clearMarkerPath, 'utf-8'));
+        logger.info(
+          { group: group.name, summary: markerData.summary?.slice(0, 100) },
+          'Clear session marker found, deleting session',
+        );
+      } catch {
+        logger.info({ group: group.name }, 'Clear session marker found, deleting session');
+      }
+      deleteSession(group.folder);
+      delete sessions[group.folder];
+      try { fs.unlinkSync(clearMarkerPath); } catch { /* ignore */ }
     }
 
     if (output.status === 'error') {
